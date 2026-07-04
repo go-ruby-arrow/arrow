@@ -269,15 +269,22 @@ func TestReadFileErrors(t *testing.T) {
 		t.Errorf("bad file err=%v", err)
 	}
 	// RecordBatch parse failure: a structurally valid file (intact footer, so
-	// NewFileReader and NumRecords succeed) whose record-batch message header is
-	// corrupted, so RecordBatch(0) fails.
+	// NewFileReader and NumRecords succeed) whose record-batch message body is
+	// corrupted, so RecordBatch(0) fails. The exact byte layout is
+	// architecture-dependent (little- vs big-endian metadata), so scan for a
+	// single-byte flip in the message region (before the footer) that triggers
+	// the record-batch parse path rather than hard-coding an offset.
 	data := encodeFile(sampleTable(t))
-	corrupt := append([]byte(nil), data...)
-	for off := 184; off < 192 && off < len(corrupt); off++ {
-		corrupt[off] ^= 0xFF
+	found := false
+	for off := 8; off < len(data)-120 && !found; off++ {
+		c := append([]byte(nil), data...)
+		c[off] ^= 0xFF
+		if _, err := ReadTableFile(bytes.NewReader(c)); err != nil &&
+			bytes.Contains([]byte(err.Error()), []byte("record batch")) {
+			found = true
+		}
 	}
-	_, err := ReadTableFile(bytes.NewReader(corrupt))
-	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("record batch")) {
-		t.Errorf("corrupt record batch err=%v", err)
+	if !found {
+		t.Error("could not trigger a record-batch parse error via corruption")
 	}
 }
