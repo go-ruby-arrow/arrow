@@ -1,6 +1,6 @@
 module github.com/go-ruby-arrow/arrow
 
-go 1.26.4
+go 1.27.1
 
 require github.com/apache/arrow-go/v18 v18.8.0
 
